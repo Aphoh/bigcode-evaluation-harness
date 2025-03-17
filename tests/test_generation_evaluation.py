@@ -87,7 +87,7 @@ def test_generation():
     evaluator = Evaluator(accelerator, model, tokenizer, args)
     for task in GEN_TASKS:
         print(f"testing task {task}")
-        generations, references = evaluator.generate_text(task)
+        generations, references = evaluator.generation_inputs(task)
         true_gens, true_refs = load_generation_examples(task)
         assert generations == true_gens
         assert references == true_refs
