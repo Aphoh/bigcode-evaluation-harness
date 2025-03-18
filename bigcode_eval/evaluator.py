@@ -27,10 +27,11 @@ Once you have read this disclaimer and taken appropriate precautions, set the ar
 """
 
 class Evaluator:
-    def __init__(self, tokenizer, prompt, load_data_path):
+    def __init__(self, tokenizer, prompt, load_data_path, allow_code_execution):
         self.tokenizer = tokenizer
         self.prompt = prompt
         self.load_data_path = load_data_path
+        self.allow_code_execution = allow_code_execution
 
     
     def write_gen_inputs(self, task_name: str, handle: TextIO, limit: int, n_copies: int, prefix: str, instruction_tokens: str):
@@ -53,39 +54,61 @@ class Evaluator:
         print(f"Wrote task {task_name}")
 
 
-    def evaluate_generations(self, task_name, generations_path: Path, allow_code_execution: bool):
-        task = tasks.get_task(task_name, self.args)
-        dataset = task.get_dataset()
-        n_samples = min(self.args.limit, len(dataset)) if self.args.limit else len(dataset)
-        references = [task.get_reference(dataset[i]) for i in range(n_samples)]
-
-        # TODO: what is this doing? checking a ground truth maybe?
-        if self.args.check_references:
-            if "get_solution" in inspect.signature(task.get_reference).parameters:
-                solutions = [[task.get_reference(dataset[i], get_solution=True)] for i in range(n_samples)]
-            else:
-                solutions = [[ref] for ref in references]
-            return solutions, references
-
-        gen_by_sample = defaultdict(list)
+    def evaluate_generations(self, task_names, args):
+        generations_path = args.generations_file
+        print(f"Loading generations from {generations_path}")
         with open(generations_path, "r") as f:
-            for line in f:
-                if line.strip():
-                    elem = json.loads(line)
-                    assert elem["task_name"] == task_name
-                    sample = elem["sample"]
-                    gen_by_sample[sample].append(elem["output"])
+            generations_data = [json.loads(line) for line in f]
+        
+        # Group generations by task
+        task_generations = {}
+        for entry in generations_data:
+            task = entry["task_name"]
+            if task not in task_generations:
+                task_generations[task] = []
+            task_generations[task].append(entry)
+        
+        # Run evaluation for each task
+        results = {}
+        for task_name in task_names:
+            if task_name not in task_generations:
+                print(f"Warning: No generations found for task {task}")
+                continue
+                
+            print(f"Evaluating task: {task_name}")
+            generations = task_generations[task_name]
 
-        generations = []
-        for i in range(n_samples):
-            generations.append(gen_by_sample.get(i, []))
+            task = tasks.get_task(task_name, args)
+            dataset = task.get_dataset()
+            n_samples = min(args.limit, len(dataset)) if args.limit else len(dataset)
+            references = [task.get_reference(dataset[i]) for i in range(n_samples)]
+            
+            gen_by_sample = defaultdict(list)
+            for generation in generations:
+                assert generation["task_name"] == task_name
+                sample = generation["sample"]
+                output = generation["output"]
+                #find the earliest stop_word
+                completion_start = output.find(task.fim_middle) + len(task.fim_middle)
+                completion_end = len(output)
+                for stop_word in task.stop_words:
+                    if stop_word in output:
+                        completion_end = min(completion_end, output.find(stop_word))
+                output = output[completion_start:completion_end]
+                gen_by_sample[sample].append(output)
 
-        if task.requires_execution and not allow_code_execution:
-            raise ValueError(_WARNING)
-        # make sure tokenizer plays nice with multiprocessing
-        os.environ["TOKENIZERS_PARALLELISM"] = "false"
-        if self.allow_code_execution and task.requires_execution:
-            os.environ["HF_ALLOW_CODE_EVAL"] = "1"
-        print("Evaluating generations...")
-        results = task.process_results(generations, references)
+            predictions = []
+            for i in range(n_samples):
+                predictions.append(gen_by_sample.get(i, []))
+
+            # make sure tokenizer plays nice with multiprocessing
+            if task.requires_execution and not self.allow_code_execution:
+                raise ValueError(_WARNING)
+            # make sure tokenizer plays nice with multiprocessing
+            os.environ["TOKENIZERS_PARALLELISM"] = "false"
+            if self.allow_code_execution and task.requires_execution:
+                os.environ["HF_ALLOW_CODE_EVAL"] = "1"
+            print("Evaluating generations...")
+            task_result = task.process_results(predictions, references)
+            results[task_name] = task_result
         return results

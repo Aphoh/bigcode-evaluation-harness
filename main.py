@@ -50,6 +50,13 @@ def parse_args():
         help="Path of additional data to load for the tasks",
     )
 
+    parser.add_argument(
+        "--prompt",
+        type=str,
+        default="prompt",
+        help="Prompt type to use for generation in tasks",
+    )
+
     # Create subparsers for the two commands
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
     
@@ -64,12 +71,7 @@ def parse_args():
         default="generation_inputs.jsonl",
         help="Path to save the generation inputs as JSONL",
     )
-    write_parser.add_argument(
-        "--prompt",
-        type=str,
-        default="prompt",
-        help="Prompt type to use for generation in tasks",
-    )
+
     write_parser.add_argument(
         "--instruction_tokens",
         default=None,
@@ -196,7 +198,7 @@ def main():
         print("Changing bos_token to <s>")
 
     
-    evaluator = Evaluator(tokenizer, args.prompt, args.load_data_path)
+    evaluator = Evaluator(tokenizer, args.prompt, args.load_data_path, args.allow_code_execution)
     
     # Handle the different commands
     if args.command == "write_inputs":
@@ -212,28 +214,7 @@ def main():
             
     elif args.command == "eval":
         # Load generations from file
-        print(f"Loading generations from {args.generations_file}")
-        with open(args.generations_file, "r") as f:
-            generations_data = [json.loads(line) for line in f]
-        
-        # Group generations by task
-        task_generations = {}
-        for entry in generations_data:
-            task = entry["task"]
-            if task not in task_generations:
-                task_generations[task] = []
-            task_generations[task].append(entry["generation"])
-        
-        # Run evaluation for each task
-        results = {}
-        for task in task_names:
-            if task not in task_generations:
-                print(f"Warning: No generations found for task {task}")
-                continue
-                
-            print(f"Evaluating task: {task}")
-            generations = task_generations[task]
-            results[task] = evaluator.evaluate_generations(task, generations)
+        results = evaluator.evaluate_generations(task_names, args)
         
         # Save all args to config
         results["config"] = vars(args)
