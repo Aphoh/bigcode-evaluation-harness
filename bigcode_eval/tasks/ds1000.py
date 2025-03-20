@@ -62,7 +62,7 @@ class GeneralDS1000(Task):
 
     def __init__(self, key, mode):
         super().__init__(
-            stop_words=["</code>", "# SOLUTION END"], requires_execution=True
+            stop_words=["</code>", "# SOLUTION END", "<|endoftext|>"], requires_execution=True
         )
         self._key = key
         self._mode = mode

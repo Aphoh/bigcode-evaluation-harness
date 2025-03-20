@@ -89,12 +89,14 @@ class Evaluator:
                 sample = generation["sample"]
                 output = generation["output"]
                 #find the earliest stop_word
-                completion_start = output.find(task.fim_middle) + len(task.fim_middle)
+                fim_middle = '<fim_middle>' if 'starcoder' in self.tokenizer.name_or_path else '<|fim_middle|>' #qwen
+                completion_start = output.find(fim_middle) + len(fim_middle)
+                output = output[completion_start:]
                 completion_end = len(output)
                 for stop_word in task.stop_words:
                     if stop_word in output:
                         completion_end = min(completion_end, output.find(stop_word))
-                output = output[completion_start:completion_end]
+                output = output[:completion_end]
                 gen_by_sample[sample].append(output)
 
             predictions = []

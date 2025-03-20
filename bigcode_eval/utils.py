@@ -89,8 +89,12 @@ class FormattedDataset(IterableDataset):
             return f"{preprefix}{prefix}<|mask:0|>{suffix}<|mask:0|>"
         elif model_id in ["bigcode/santacoder"]:
             return f"<fim-prefix>{preprefix}{prefix}<fim-suffix>{suffix}<fim-middle>"
-        elif model_id in ["bigcode/starcoder", "bigcode/starcoderbase"]:
+        elif model_id in ["bigcode/starcoder", "bigcode/starcoderbase", "bigcode/starcoder2-3b"]:
             return f"<fim_prefix>{preprefix}{prefix}<fim_suffix>{suffix}<fim_middle>"
+        elif 'starcoder' in model_id:
+            return f"<fim_prefix>{preprefix}{prefix}<fim_suffix>{suffix}<fim_middle>"
+        elif 'Qwen' in model_id:
+            return f"<|fim_prefix|>{preprefix}{prefix}<|fim_suffix|>{suffix}<|fim_middle|>"
         else:
             raise ValueError(f"Infilling not yet supported for: {model_id}")
 

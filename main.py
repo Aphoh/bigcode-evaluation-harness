@@ -196,12 +196,10 @@ def main():
         tokenizer.bos_token = "<s>"
         tokenizer.bos_token_id = 1
         print("Changing bos_token to <s>")
-
-    
-    evaluator = Evaluator(tokenizer, args.prompt, args.load_data_path, args.allow_code_execution)
     
     # Handle the different commands
     if args.command == "write_inputs":
+        evaluator = Evaluator(tokenizer, args.prompt, args.load_data_path, False)
         print(f"Generating inputs for tasks: {', '.join(task_names)}")
         
         with open(args.output_file, "w") as f:
@@ -213,6 +211,7 @@ def main():
                 evaluator.write_gen_inputs(task, f, args.limit, args.n_copies, prefix, instruction_tokens)
             
     elif args.command == "eval":
+        evaluator = Evaluator(tokenizer, args.prompt, args.load_data_path, True)
         # Load generations from file
         results = evaluator.evaluate_generations(task_names, args)
         
