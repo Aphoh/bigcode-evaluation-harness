@@ -1,5 +1,6 @@
-from typing import Dict, List
-
+from typing import Dict, List, Union
+import numpy as np
+import itertools
 from tqdm import tqdm
 
 from bigcode_eval.base import Task
@@ -35,8 +36,33 @@ def initialize_empty_metrics(languages: List[str]) -> Dict[str, float]:
     return metrics
 
 
+def estimate_pass_at_k(
+    num_samples: Union[int, List[int], np.ndarray],
+    num_correct: Union[List[int], np.ndarray],
+    k: int,
+) -> np.ndarray:
+    """
+    Estimates pass@k of each problem and returns them in an array.
+    """
+
+    def estimator(n: int, c: int, k: int) -> float:
+        """
+        Calculates 1 - comb(n - c, k) / comb(n, k).
+        """
+        if n - c < k:
+            return 1.0
+        return 1.0 - np.prod(1.0 - k / np.arange(n - c + 1, n + 1))
+
+    if isinstance(num_samples, int):
+        num_samples_it = itertools.repeat(num_samples, len(num_correct))
+    else:
+        assert len(num_samples) == len(num_correct)
+        num_samples_it = iter(num_samples)
+
+    return np.array([estimator(int(n), int(c), k) for n, c in zip(num_samples_it, num_correct)])
+
 def aggregate_per_lang_accuracy(
-    metrics: Dict[str, float], languages: List[str]
+    metrics: Dict[str, float], total, correct, languages: List[str]
 ) -> Dict[str, float]:
     em_metrics = {}
     for lang in languages:
@@ -47,7 +73,10 @@ def aggregate_per_lang_accuracy(
             else 0
         )
         em_metrics[f"{lang} Exact Match"] = acc
-
+        ks = [1, 5, 10, 20, 50, 100]
+        for k in ks:
+            if (np.array(total[lang]) >= k).all():
+                em_metrics[f"pass@{k}_{lang}"] = estimate_pass_at_k(total[lang], correct[lang], k).mean() 
     return em_metrics
 
 
@@ -105,15 +134,20 @@ class SantaCoderFIM(Task):
             list of str containing refrences
         :return: dict[str: float]
         """
+        total = {f'{lang}': [] for lang in LANGUAGES}
+        correct = {f'{lang}': [] for lang in LANGUAGES}
         metrics = initialize_empty_metrics(LANGUAGES)
         for idx, (gen, reference) in tqdm(enumerate(zip(generations, references))):
             language = self.get_dataset()[idx]["language"]
+            total[language].append(len(gen))
+            correct[language].append(0)
             for g in gen:
                 metrics[f"n_accurate_{language}"] += int(g.strip() == reference.strip())
+                correct[language][-1] += int(g.strip() == reference.strip())
 
             metrics[f"n_count_{language}"] += len(gen)
 
-        em_metrics = aggregate_per_lang_accuracy(metrics, LANGUAGES)
+        em_metrics = aggregate_per_lang_accuracy(metrics, total, correct, LANGUAGES)
 
         return em_metrics
 

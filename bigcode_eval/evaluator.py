@@ -104,10 +104,13 @@ class Evaluator:
             for i in range(n_samples):
                 predictions.append(gen_by_sample.get(i, []))
                 
-            # if task_name != "ds1000-all-insertion" or args.n_copies == 1:
-            task_result = task.process_results(predictions, references)
-            results[task_name] = task_result
-            # continue
+            if task_name != "ds1000-all-insertion":
+                task_result = task.process_results(predictions, references)
+                results[task_name] = task_result
+            else:
+                # Handle ds1000-all-insertion separately
+                task_result, correct_matrix = task.process_results(predictions, references)
+                results[task_name] = task_result
 
             # # For ds1000-all-insertion, we need to process the results multithreadingly since it is slow
             # # Split predictions and references into batches for multithreading
@@ -142,5 +145,7 @@ class Evaluator:
             #     aggregated_results[key] /= n_samples
 
             # results[task_name] = aggregated_results
+        if task_name == "ds1000-all-insertion":
+            return results, correct_matrix
         return results
 

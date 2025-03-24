@@ -219,17 +219,26 @@ def main():
     elif args.command == "eval":
         evaluator = Evaluator(tokenizer, args.prompt, args.load_data_path, True)
         # Load generations from file
-        results = evaluator.evaluate_generations(task_names, args)
-        
+        correct_matrix = None
+        if "ds1000-all-insertion" in task_names:
+            results, correct_matrix = evaluator.evaluate_generations(task_names, args)
+        else:
+            results = evaluator.evaluate_generations(task_names, args)
         # Save all args to config
         results["config"] = vars(args)
         dumped = json.dumps(results, indent=2)
         print(dumped)
-        
         results_file = args.generations_file[:args.generations_file.find("output")] + "eval.jsonl"
         with open(results_file, "w") as f:
             f.write(dumped)
         print(f"Results saved to {results_file}")
+        
+        if correct_matrix:
+            ds1000_file = args.generations_file[:args.generations_file.find("output")] + "execution.jsonl"
+            with open(ds1000_file, "w") as f:
+                f.write(dumped)
+            print(f"DS1000 execution matrix saved to {results_file}")
+            
 
 if __name__ == "__main__":
     main()

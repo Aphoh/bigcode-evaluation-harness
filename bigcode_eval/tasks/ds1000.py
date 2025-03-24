@@ -55,7 +55,32 @@ def create_all_tasks():
         for mode in ["Completion", "Insertion"]
     }
 import os
+import numpy as np
+from typing import Union, List
+def estimate_pass_at_k(
+    num_samples: Union[int, List[int], np.ndarray],
+    num_correct: Union[List[int], np.ndarray],
+    k: int,
+) -> np.ndarray:
+    """
+    Estimates pass@k of each problem and returns them in an array.
+    """
 
+    def estimator(n: int, c: int, k: int) -> float:
+        """
+        Calculates 1 - comb(n - c, k) / comb(n, k).
+        """
+        if n - c < k:
+            return 1.0
+        return 1.0 - np.prod(1.0 - k / np.arange(n - c + 1, n + 1))
+
+    if isinstance(num_samples, int):
+        num_samples_it = itertools.repeat(num_samples, len(num_correct))
+    else:
+        assert len(num_samples) == len(num_correct)
+        num_samples_it = iter(num_samples)
+
+    return np.array([estimator(int(n), int(c), k) for n, c in zip(num_samples_it, num_correct)])
 class GeneralDS1000(Task):
     DATASET_PATH = None
     DATASET_NAME = None
@@ -180,12 +205,26 @@ class GeneralDS1000(Task):
         """
         dataset = self.get_dataset()
         num_correct = 0
+        correct_matrix = [[] for _ in range(len(references))]
+        total = []
+        correct = []
         print("Scoring generations...")
         for i, ref in tqdm.tqdm(enumerate(references), total=len(references)):
             test = [doc for doc in dataset if doc["reference_code"] == ref][0]
+            total.append(len(generations[i]))
+            correct.append(0)
             for gen in generations[i]:
                 is_correct = test.test(gen)
+                correct_matrix[i].append(is_correct)
                 if is_correct:
                     num_correct += 1
+                    correct[-1] += 1
         accuracy = num_correct / len(references) / len(generations[0])
-        return {f"mean pass@1 accuracy ({len(generations[0])} samples)": accuracy, "num_problems": len(references)}
+        res = {
+            f"mean pass@1 accuracy ({len(generations[0])} samples)": accuracy,
+        }
+        ks = [1, 5, 10, 20, 50, 100]
+        for k in ks:
+            if (np.array(total) >= k).all():
+                res[f"pass@{k}"] = estimate_pass_at_k(total, correct, k).mean() 
+        return res, correct_matrix
