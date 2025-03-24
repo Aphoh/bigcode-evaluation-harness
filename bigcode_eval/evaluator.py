@@ -7,6 +7,8 @@ from typing import TextIO
 
 from bigcode_eval import tasks
 from bigcode_eval.generation import get_generation_inputs
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections import defaultdict
 
 _WARNING = """
 ################################################################################
@@ -53,13 +55,12 @@ class Evaluator:
             handle.write(json.dumps(g) + "\n")
         print(f"Wrote task {task_name}")
 
-
     def evaluate_generations(self, task_names, args):
         generations_path = args.generations_file
         print(f"Loading generations from {generations_path}")
         with open(generations_path, "r") as f:
             generations_data = [json.loads(line) for line in f]
-        
+
         # Group generations by task
         task_generations = {}
         for entry in generations_data:
@@ -67,14 +68,14 @@ class Evaluator:
             if task not in task_generations:
                 task_generations[task] = []
             task_generations[task].append(entry)
-        
+
         # Run evaluation for each task
         results = {}
         for task_name in task_names:
             if task_name not in task_generations:
-                print(f"Warning: No generations found for task {task}")
+                print(f"Warning: No generations found for task {task_name}")
                 continue
-                
+
             print(f"Evaluating task: {task_name}")
             generations = task_generations[task_name]
 
@@ -82,14 +83,14 @@ class Evaluator:
             dataset = task.get_dataset()
             n_samples = min(args.limit, len(dataset)) if args.limit else len(dataset)
             references = [task.get_reference(dataset[i]) for i in range(n_samples)]
-            
+
             gen_by_sample = defaultdict(list)
             for generation in generations:
                 assert generation["task_name"] == task_name
                 sample = generation["sample"]
                 output = generation["output"]
-                #find the earliest stop_word
-                fim_middle = '<fim_middle>' if 'starcoder' in self.tokenizer.name_or_path else '<|fim_middle|>' #qwen
+                # Find the earliest stop_word
+                fim_middle = '<fim_middle>' if 'starcoder' in self.tokenizer.name_or_path else ''
                 completion_start = output.find(fim_middle) + len(fim_middle)
                 output = output[completion_start:]
                 completion_end = len(output)
@@ -102,15 +103,44 @@ class Evaluator:
             predictions = []
             for i in range(n_samples):
                 predictions.append(gen_by_sample.get(i, []))
-
-            # make sure tokenizer plays nice with multiprocessing
-            if task.requires_execution and not self.allow_code_execution:
-                raise ValueError(_WARNING)
-            # make sure tokenizer plays nice with multiprocessing
-            os.environ["TOKENIZERS_PARALLELISM"] = "false"
-            if self.allow_code_execution and task.requires_execution:
-                os.environ["HF_ALLOW_CODE_EVAL"] = "1"
-            print("Evaluating generations...")
+                
+            # if task_name != "ds1000-all-insertion" or args.n_copies == 1:
             task_result = task.process_results(predictions, references)
             results[task_name] = task_result
+            # continue
+
+            # # For ds1000-all-insertion, we need to process the results multithreadingly since it is slow
+            # # Split predictions and references into batches for multithreading
+            # num_threads = args.num_threads
+            # batch_size = len(predictions) // num_threads
+            # prediction_batches = [predictions[i:i + batch_size] for i in range(0, len(predictions), batch_size)]
+            # reference_batches = [references[i:i + batch_size] for i in range(0, len(references), batch_size)]
+
+            # def process_batch(pred_batch, ref_batch):
+            #     # Process a batch and return the task results
+            #     return task.process_results(pred_batch, ref_batch)
+
+            # # Multithreading to process each batch
+            # aggregated_results = defaultdict(float)
+            # # os.chdir("/home/server24/long_workspace/llm/code_eval/bigcode-evaluation-harness/tmp_for_ds")
+            # with ThreadPoolExecutor(max_workers=num_threads) as executor:
+            #     futures = [
+            #         executor.submit(process_batch, prediction_batches[ind], reference_batches[ind])
+            #         for ind in range(len(prediction_batches))
+            #     ]
+            #     for future in as_completed(futures):
+            #         batch_result = future.result()
+            #         print(batch_result)
+            #         for key, value in batch_result.items():
+            #             if key == "num_problems":
+            #                 continue
+            #             aggregated_results[key] += value * batch_result['num_problems']
+
+            # # os.chdir("/home/server24/long_workspace/llm/code_eval/bigcode-evaluation-harness")
+            # # Normalize the results (mean)
+            # for key in aggregated_results:
+            #     aggregated_results[key] /= n_samples
+
+            # results[task_name] = aggregated_results
         return results
+

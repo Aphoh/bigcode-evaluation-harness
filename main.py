@@ -95,12 +95,12 @@ def parse_args():
         required=True,
         help="Path to file with generated solutions to evaluate",
     )
-    eval_parser.add_argument(
-        "--results_file",
-        type=str,
-        default="evaluation_results.json",
-        help="Path to save the evaluation results",
-    )
+    # eval_parser.add_argument(
+    #     "--results_file",
+    #     type=str,
+    #     default="evaluation_results.json",
+    #     help="Path to save the evaluation results",
+    # )
     eval_parser.add_argument(
         "--allow_code_execution",
         action="store_true",
@@ -116,6 +116,12 @@ def parse_args():
         "--check_references",
         action="store_true",
         help="Don't evaluate generations but benchmark groundtruth (useful for debugging)",
+    )
+    eval_parser.add_argument(
+        "--num_threads",
+        type=int,
+        default=16,
+        help="Multithreaded Eval",
     )
 
     args = parser.parse_args()
@@ -220,9 +226,10 @@ def main():
         dumped = json.dumps(results, indent=2)
         print(dumped)
         
-        with open(args.results_file, "w") as f:
+        results_file = args.generations_file[:args.generations_file.find("output")] + "eval.jsonl"
+        with open(results_file, "w") as f:
             f.write(dumped)
-        print(f"Results saved to {args.results_file}")
+        print(f"Results saved to {results_file}")
 
 if __name__ == "__main__":
     main()

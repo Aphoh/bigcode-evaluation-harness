@@ -54,7 +54,7 @@ def create_all_tasks():
         ]
         for mode in ["Completion", "Insertion"]
     }
-
+import os
 
 class GeneralDS1000(Task):
     DATASET_PATH = None
@@ -188,4 +188,4 @@ class GeneralDS1000(Task):
                 if is_correct:
                     num_correct += 1
         accuracy = num_correct / len(references) / len(generations[0])
-        return {f"mean pass@1 accuracy ({len(generations[0])} samples)": accuracy}
+        return {f"mean pass@1 accuracy ({len(generations[0])} samples)": accuracy, "num_problems": len(references)}

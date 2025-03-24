@@ -48,6 +48,6 @@ def get_generation_inputs(
     )
 
     for elem in formatted_ds:
-        yield elem | extra_keys
+        yield {**elem, **extra_keys}
 
 
